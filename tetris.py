@@ -8,8 +8,14 @@ Controls:
   space: hard drop
   p   : pause
   q   : quit
+
+Options:
+  --start-level N       Start at level N (default 1)
+  --speed-multiplier X  Global speed factor (default 1.0, higher=faster)
+  --fixed-level         Keep level constant (no level-up)
 """
 
+import argparse
 import curses
 import random
 import time
@@ -17,6 +23,7 @@ import time
 BOARD_W = 10
 BOARD_H = 20
 TICK_START = 0.5
+MIN_TICK = 0.08
 
 SHAPES = {
     "I": [[1, 1, 1, 1]],
@@ -35,6 +42,11 @@ def rotate_clockwise(mat):
     return [list(row) for row in zip(*mat[::-1])]
 
 
+def level_tick(level, speed_multiplier=1.0):
+    base = max(MIN_TICK, TICK_START - (level - 1) * 0.04)
+    return max(0.03, base / max(0.1, speed_multiplier))
+
+
 class Piece:
     def __init__(self, kind):
         self.kind = kind
@@ -44,12 +56,15 @@ class Piece:
 
 
 class Game:
-    def __init__(self):
+    def __init__(self, start_level=1, speed_multiplier=1.0, fixed_level=False):
         self.board = [[0] * BOARD_W for _ in range(BOARD_H)]
         self.score = 0
         self.lines = 0
-        self.level = 1
-        self.tick = TICK_START
+        self.level = max(1, start_level)
+        self.start_level = self.level
+        self.speed_multiplier = speed_multiplier
+        self.fixed_level = fixed_level
+        self.tick = level_tick(self.level, self.speed_multiplier)
         self.game_over = False
         self.paused = False
         self.cur = self.spawn()
@@ -96,8 +111,9 @@ class Game:
             self.board = [[0] * BOARD_W for _ in range(cleared)] + new_rows
             self.lines += cleared
             self.score += [0, 100, 300, 500, 800][cleared] * self.level
-            self.level = 1 + self.lines // 10
-            self.tick = max(0.08, TICK_START - (self.level - 1) * 0.04)
+            if not self.fixed_level:
+                self.level = self.start_level + self.lines // 10
+            self.tick = level_tick(self.level, self.speed_multiplier)
 
     def move(self, dx):
         nx = self.cur.x + dx
@@ -137,8 +153,9 @@ def draw(stdscr, g):
     stdscr.addstr(1, 0, f"Score: {g.score}")
     stdscr.addstr(2, 0, f"Lines: {g.lines}")
     stdscr.addstr(3, 0, f"Level: {g.level}")
+    stdscr.addstr(4, 0, f"Speed x{g.speed_multiplier:.2f}")
 
-    top, left = 1, 18
+    top, left = 1, 20
     stdscr.addstr(top - 1, left, "+" + "--" * BOARD_W + "+")
     for y in range(BOARD_H):
         line = "|"
@@ -156,25 +173,25 @@ def draw(stdscr, g):
                 if y >= 0:
                     stdscr.addstr(top + y, left + 1 + x * 2, "██")
 
-    stdscr.addstr(6, 0, "Controls:")
-    stdscr.addstr(7, 0, "←/→ move, ↑ rotate")
-    stdscr.addstr(8, 0, "↓ soft drop, space hard drop")
-    stdscr.addstr(9, 0, "p pause, q quit")
+    stdscr.addstr(7, 0, "Controls:")
+    stdscr.addstr(8, 0, "←/→ move, ↑ rotate")
+    stdscr.addstr(9, 0, "↓ soft drop, space hard drop")
+    stdscr.addstr(10, 0, "p pause, q quit")
 
     if g.paused:
-        stdscr.addstr(12, 0, "PAUSED")
+        stdscr.addstr(13, 0, "PAUSED")
     if g.game_over:
-        stdscr.addstr(12, 0, "GAME OVER - press q")
+        stdscr.addstr(13, 0, "GAME OVER - press q")
 
     stdscr.refresh()
 
 
-def run(stdscr):
+def run(stdscr, start_level=1, speed_multiplier=1.0, fixed_level=False):
     curses.curs_set(0)
     stdscr.nodelay(True)
     stdscr.keypad(True)
 
-    g = Game()
+    g = Game(start_level=start_level, speed_multiplier=speed_multiplier, fixed_level=fixed_level)
     last_tick = time.time()
 
     while True:
@@ -206,8 +223,29 @@ def run(stdscr):
         time.sleep(0.01)
 
 
+def parse_args():
+    p = argparse.ArgumentParser(description="Terminal Tetris")
+    p.add_argument("--start-level", type=int, default=1, help="starting level (default: 1)")
+    p.add_argument(
+        "--speed-multiplier",
+        type=float,
+        default=1.0,
+        help="global speed factor, higher=faster (default: 1.0)",
+    )
+    p.add_argument("--fixed-level", action="store_true", help="disable auto level-up")
+    return p.parse_args()
+
+
 def main():
-    curses.wrapper(run)
+    args = parse_args()
+    curses.wrapper(
+        lambda stdscr: run(
+            stdscr,
+            start_level=max(1, args.start_level),
+            speed_multiplier=max(0.1, args.speed_multiplier),
+            fixed_level=args.fixed_level,
+        )
+    )
 
 
 if __name__ == "__main__":
