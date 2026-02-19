@@ -8,14 +8,8 @@ Controls:
   space: hard drop
   p   : pause
   q   : quit
-
-Options:
-  --start-level N       Start at level N (default 1)
-  --speed-multiplier X  Global speed factor (default 1.0, higher=faster)
-  --fixed-level         Keep level constant (no level-up)
 """
 
-import argparse
 import curses
 import random
 import time
@@ -186,12 +180,76 @@ def draw(stdscr, g):
     stdscr.refresh()
 
 
-def run(stdscr, start_level=1, speed_multiplier=1.0, fixed_level=False):
+def settings_screen(stdscr):
     curses.curs_set(0)
+    stdscr.nodelay(False)
+    stdscr.keypad(True)
+
+    start_level = 1
+    speed_multiplier = 1.0
+    fixed_level = False
+    selected = 0
+
+    items = ["Start level", "Speed multiplier", "Fixed level", "Start game"]
+
+    while True:
+        stdscr.erase()
+        stdscr.addstr(0, 0, "TETRIS - SETTINGS")
+        stdscr.addstr(1, 0, "Use ↑/↓ to select, ←/→ to change, Enter to start")
+        stdscr.addstr(2, 0, "Press q to quit")
+
+        values = [
+            str(start_level),
+            f"{speed_multiplier:.2f}x",
+            "ON" if fixed_level else "OFF",
+            "",
+        ]
+
+        for i, label in enumerate(items):
+            marker = "> " if i == selected else "  "
+            if label == "Start game":
+                line = f"{marker}{label}"
+            else:
+                line = f"{marker}{label}: {values[i]}"
+            stdscr.addstr(4 + i, 0, line)
+
+        stdscr.refresh()
+        key = stdscr.getch()
+
+        if key == ord("q"):
+            return None
+        if key == curses.KEY_UP:
+            selected = (selected - 1) % len(items)
+        elif key == curses.KEY_DOWN:
+            selected = (selected + 1) % len(items)
+        elif key in (curses.KEY_LEFT, curses.KEY_RIGHT):
+            direction = -1 if key == curses.KEY_LEFT else 1
+            if selected == 0:
+                start_level = max(1, min(20, start_level + direction))
+            elif selected == 1:
+                speed_multiplier = max(0.5, min(3.0, round(speed_multiplier + direction * 0.1, 2)))
+            elif selected == 2:
+                fixed_level = not fixed_level
+        elif key in (10, 13, curses.KEY_ENTER):
+            if selected == 3:
+                return {
+                    "start_level": start_level,
+                    "speed_multiplier": speed_multiplier,
+                    "fixed_level": fixed_level,
+                }
+            if selected == 2:
+                fixed_level = not fixed_level
+
+
+def run_game(stdscr, settings):
     stdscr.nodelay(True)
     stdscr.keypad(True)
 
-    g = Game(start_level=start_level, speed_multiplier=speed_multiplier, fixed_level=fixed_level)
+    g = Game(
+        start_level=settings["start_level"],
+        speed_multiplier=settings["speed_multiplier"],
+        fixed_level=settings["fixed_level"],
+    )
     last_tick = time.time()
 
     while True:
@@ -223,30 +281,12 @@ def run(stdscr, start_level=1, speed_multiplier=1.0, fixed_level=False):
         time.sleep(0.01)
 
 
-def parse_args():
-    p = argparse.ArgumentParser(description="Terminal Tetris")
-    p.add_argument("--start-level", type=int, default=1, help="starting level (default: 1)")
-    p.add_argument(
-        "--speed-multiplier",
-        type=float,
-        default=1.0,
-        help="global speed factor, higher=faster (default: 1.0)",
-    )
-    p.add_argument("--fixed-level", action="store_true", help="disable auto level-up")
-    return p.parse_args()
-
-
-def main():
-    args = parse_args()
-    curses.wrapper(
-        lambda stdscr: run(
-            stdscr,
-            start_level=max(1, args.start_level),
-            speed_multiplier=max(0.1, args.speed_multiplier),
-            fixed_level=args.fixed_level,
-        )
-    )
+def main(stdscr):
+    settings = settings_screen(stdscr)
+    if settings is None:
+        return
+    run_game(stdscr, settings)
 
 
 if __name__ == "__main__":
-    main()
+    curses.wrapper(main)
