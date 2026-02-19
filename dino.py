@@ -27,8 +27,9 @@ class DinoGame:
         self.best = 0
         self.speed = 1.0
         self.tick = 0.04
-        self.gravity = 0.75
-        self.jump_velocity = -4.9
+        # Physics in rows/second and rows/second² for stable jump arcs.
+        self.gravity = 55.0
+        self.jump_velocity = -18.0
 
         self.player_x = 8
         self.player_y = float(GROUND_Y)
@@ -98,9 +99,15 @@ class DinoGame:
         if self.game_over or self.paused:
             return
 
-        # physics
-        self.player_vy += self.gravity * self.tick * 7.0
-        self.player_y += self.player_vy
+        # physics (dt-based integration)
+        dt = self.tick
+        self.player_vy += self.gravity * dt
+        self.player_y += self.player_vy * dt
+
+        # Keep player in visible area and on the ground.
+        if self.player_y < 0:
+            self.player_y = 0.0
+            self.player_vy = max(0.0, self.player_vy)
         if self.player_y > GROUND_Y:
             self.player_y = float(GROUND_Y)
             self.player_vy = 0.0
