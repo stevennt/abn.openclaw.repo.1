@@ -7,6 +7,7 @@ Controls:
   ↑   : rotate
   space: hard drop
   p   : pause
+  s   : settings (restart game)
   q   : quit
 """
 
@@ -170,7 +171,7 @@ def draw(stdscr, g):
     stdscr.addstr(7, 0, "Controls:")
     stdscr.addstr(8, 0, "←/→ move, ↑ rotate")
     stdscr.addstr(9, 0, "↓ soft drop, space hard drop")
-    stdscr.addstr(10, 0, "p pause, q quit")
+    stdscr.addstr(10, 0, "p pause, s settings, q quit")
 
     if g.paused:
         stdscr.addstr(13, 0, "PAUSED")
@@ -257,7 +258,9 @@ def run_game(stdscr, settings):
         key = stdscr.getch()
 
         if key == ord("q"):
-            break
+            return "quit"
+        if key == ord("s"):
+            return "settings"
         if key == ord("p") and not g.game_over:
             g.paused = not g.paused
 
@@ -282,10 +285,22 @@ def run_game(stdscr, settings):
 
 
 def main(stdscr):
-    settings = settings_screen(stdscr)
-    if settings is None:
-        return
-    run_game(stdscr, settings)
+    settings = {
+        "start_level": 1,
+        "speed_multiplier": 1.0,
+        "fixed_level": False,
+    }
+
+    while True:
+        action = run_game(stdscr, settings)
+        if action == "quit":
+            return
+
+        # Open settings on demand, then start game immediately again.
+        new_settings = settings_screen(stdscr)
+        if new_settings is None:
+            return
+        settings = new_settings
 
 
 if __name__ == "__main__":
